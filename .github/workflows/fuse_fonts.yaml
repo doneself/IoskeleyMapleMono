@@ -3,15 +3,16 @@ on:
   workflow_dispatch:
     inputs:
       FORCE:
-        description: Force rebuild
+        description: Skip checking updates & Force to fuse
         type: boolean
         default: false
+        required: false
 
 env:
+  FORCE: ${{ github.event.inputs.FORCE }}
   IOSKELEY_LATEST_RELEASE_API_URL: ${{ github.api_url }}/repos/ahatem/IoskeleyMono/releases/latest
-  IOSKELEY_COPYRIGHT: Copyright 2026 The IoskeleyMono Project Authors (${{ github.server_url }}/ahatem/IoskeleyMono)
+  IOSKELEY_COPYRIGHT: Copyright 2026 The IoskeleyMono Project Authors (https://github.com/ahatem/IoskeleyMono)
   MAPLE_GIT_URL: ${{ github.server_url }}/subframe7536/maple-font.git
-  MAPLE_LATEST_RELEASE_API_URL: ${{ github.api_url }}/repos/subframe7536/maple-font/releases/latest
   MAPLE_COPYRIGHT: Copyright 2022 The Maple Mono Project Authors (${{ github.server_url }}/subframe7536/maple-font)
   FUSION_NAME: Ioskeley Maple Mono
   FUSION_ID: IoskeleyMapleMono
@@ -34,7 +35,8 @@ jobs:
       LIGA_SUFFIX: XX
       FUSION_VERSION: dev
     steps:
-      - uses: actions/checkout@v6
+      - name: Fetch Python Script & OFL License
+        uses: actions/checkout@v6
         with:
           sparse-checkout: |
             fuse_fonts.ff
@@ -51,84 +53,91 @@ jobs:
         run: |
           mkdir -p source-fonts/jetbrains
           curl -s "${IOSKELEY_LATEST_RELEASE_API_URL}" > meta.json
-          URL=$(jq -r '.assets | map(select(.name == "IoskeleyMono-NerdFont.zip"))[0].browser_download_url' meta.json)
-          wget "$URL" -O ioskeley.zip
+          ZIP_URL=$(jq -r '.assets[] | select(.name == "IoskeleyMono-NerdFont.zip") | .browser_download_url' meta.json)
+          wget "$ZIP_URL" -O ioskeley.zip
           unzip -q ioskeley.zip
           cp Normal/*.ttf source-fonts/jetbrains/
 
       - name: Build Maple
         run: |
-          git clone --depth 1 "${MAPLE_GIT_URL}" maple-font-src
-          cd maple-font-src
-          pip3 install -r requirements.txt
-          python3 build.py --cn --liga --hinted --ttf-only ${NERD_ARGS} ${NARROW_ARGS}
-          cd ..
-          mkdir -p source-fonts/maple
-          if [[ "${NERD_SUFFIX}" == "NF" ]]; then
-            cp -r maple-font-src/fonts/NF-CN/* source-fonts/maple/
+          git clone --depth 1 "$MAPLE_GIT_URL" maple-font
+          cd "maple-font"
+          pip install -r "requirements.txt"
+          python "build.py" --normal --liga --cn --hinted --ttf-only "$NERD_ARGS" $NARROW_ARGS
+          cd ".."
+          mkdir -p "source-fonts/maple"
+          if [[ "$NERD_SUFFIX" == "NF" ]]; then
+            cp -r "maple-font/fonts/NF-CN/"* "source-fonts/maple/"
           else
-            cp -r maple-font-src/fonts/CN/* source-fonts/maple/
+            cp -r "maple-font/fonts/CN/"* "source-fonts/maple/"
           fi
 
       - name: Install FontForge & FtCli
         run: |
-          sudo apt-get -y install fontforge
-          pip install foundrytools-cli
+          sudo apt-get -y install "fontforge"
+          pip install "foundrytools-cli"
 
       - name: Fuse Fonts
         run: |
-          mkdir -p fused-fonts-HT fused-fonts-XX
+          mkdir -p "fused-fonts-HT"
+          mkdir -p "fused-fonts-XX"
           for STYLE in "Thin" "ThinItalic" "ExtraLight" "ExtraLightItalic" "Light" "LightItalic" "Regular" "Italic" "Medium" "MediumItalic" "SemiBold" "SemiBoldItalic" "Bold" "BoldItalic" "ExtraBold" "ExtraBoldItalic"; do
-            fontforge "fuse_fonts.ff" \
-              "source-fonts/jetbrains/IoskeleyMonoNerdFontMono-${STYLE}.ttf" \
-              "source-fonts/maple/MapleMonoNormal-CN-${STYLE}.ttf" \
-              "${FUSION_ID}-${STYLE}" \
-              "${FUSION_NAME}" \
-              "${FUSION_NAME} ${STYLE}" \
-              "${STYLE}" \
-              "fused-font-HT.ttf"
-
-            if [[ "${LIGA_SUFFIX}" == "NL" ]]; then
+            if [[ "$NERD_SUFFIX" == "NF" ]]; then
+              fontforge "fuse_fonts.ff" \
+                "source-fonts/maple/MapleMonoNormal-NF-CN-$STYLE.ttf" \
+                "source-fonts/jetbrains/IoskeleyMonoNerdFontMono-$STYLE.ttf" \
+                "$FUSION_ID-$STYLE" \
+                "$FUSION_NAME" \
+                "$FUSION_NAME $STYLE" \
+                "$STYLE" \
+                "fused-font-HT.ttf"
+            else
+              fontforge "fuse_fonts.ff" \
+                "source-fonts/maple/MapleMonoNormal-CN-$STYLE.ttf" \
+                "source-fonts/jetbrains/IoskeleyMonoNerdFontMono-$STYLE.ttf" \
+                "$FUSION_ID-$STYLE" \
+                "$FUSION_NAME" \
+                "$FUSION_NAME $STYLE" \
+                "$STYLE" \
+                "fused-font-HT.ttf"
+            fi
+            if [[ "$LIGA_SUFFIX" == "NL" ]]; then
               fontforge "strip_ligas.py" "fused-font-HT.ttf"
             fi
-
             ttx "fused-font-HT.ttf"
-            sed -i 's|<xAvgCharWidth value=".*"/>|<xAvgCharWidth value="600"/>|' "fused-font-HT.ttx"
-            sed -i 's|<ulCodePageRange1 value=".*"/>|<ulCodePageRange1 value="00100000 00010110 00000001 10011111"/>|' "fused-font-HT.ttx"
+            sed -i "s|<xAvgCharWidth value=\".*\"/>|<xAvgCharWidth value=\"600\"/>|" "fused-font-HT.ttx"
+            sed -i "s|<ulCodePageRange1 value=\".*\"/>|<ulCodePageRange1 value=\"00100000 00010110 00000001 10011111\"/>|" "fused-font-HT.ttx"
             ttx -o "fused-font-HT.ttf" "fused-font-HT.ttx"
             rm "fused-font-HT.ttx"
-
-            gftools rename-font "fused-font-HT.ttf" "${FUSION_NAME}"
+            gftools rename-font "fused-font-HT.ttf" "$FUSION_NAME"
             gftools update-nameids "fused-font-HT.ttf" \
-              --uniqueid "${FUSION_ID}-${STYLE}-${FUSION_VERSION}" \
-              --description "${FUSION_DESCRIPTION}" \
-              --designer "${FUSION_DEVELOPER}" \
-              --manufacturer "${FUSION_DEVELOPER}" \
-              --trademark "${FUSION_NAME}" \
-              --version "${FUSION_VERSION}" \
-              --copyright "$(echo -e "${IOSKELEY_COPYRIGHT}\n${MAPLE_COPYRIGHT}\n${FUSION_COPYRIGHT}")" \
-              --license "${FUSION_LICENSE}" \
-              --urlvendor "${FUSION_URL}" \
+              --uniqueid "$FUSION_ID-$STYLE-$FUSION_VERSION" \
+              --description "$FUSION_DESCRIPTION" \
+              --designer "$FUSION_DEVELOPER" \
+              --manufacturer "$FUSION_DEVELOPER" \
+              --trademark "$FUSION_NAME" \
+              --version "$FUSION_VERSION" \
+              --copyright "$(echo -e "$IOSKELEY_COPYRIGHT\n$MAPLE_COPYRIGHT\n$FUSION_COPYRIGHT")" \
+              --license "$FUSION_LICENSE" \
+              --urlvendor "$FUSION_URL" \
               --urldesigner "https://github.com/ahatem/IoskeleyMono" \
               --urllicense "https://openfontlicense.org"
-
             gftools drop-hints "fused-font-HT.ttf" "fused-font-XX.ttf.fix"
-            if [[ "${NARROW_SUFFIX}" != "NR" ]]; then
-              ftcli fix "monospace" "fused-font-HT.ttf"
-              ftcli fix "monospace" "fused-font-XX.ttf.fix"
+            if [[ "$NARROW_SUFFIX" != "NR" ]]; then
+              ftcli fix "monospace" "fused-font-HT.ttf" "fused-font-XX.ttf.fix"
             fi
-            mv "fused-font-HT.ttf.fix" "fused-fonts-HT/${FUSION_ID}-${STYLE}.ttf"
-            mv "fused-font-XX.ttf.fix" "fused-fonts-XX/${FUSION_ID}-${STYLE}.ttf"
-            cp OFL.txt fused-fonts-HT/LICENSE.txt
-            cp OFL.txt fused-fonts-XX/LICENSE.txt
+            mv "fused-font-HT.ttf.fix" "fused-fonts-HT/$FUSION_ID-$STYLE.ttf"
+            mv "fused-font-XX.ttf.fix" "fused-fonts-XX/$FUSION_ID-$STYLE.ttf"
+            cp "OFL.txt" "fused-fonts-HT/LICENSE.txt"
+            cp "OFL.txt" "fused-fonts-XX/LICENSE.txt"
           done
 
-      - name: Zip artifacts
+      - name: Zip Fonts
         run: |
-          zip -r "${FUSION_ID}-${NERD_SUFFIX}-${NARROW_SUFFIX}-${LIGA_SUFFIX}-HT.zip" fused-fonts-HT/
-          zip -r "${FUSION_ID}-${NERD_SUFFIX}-${NARROW_SUFFIX}-${LIGA_SUFFIX}-XX.zip" fused-fonts-XX/
+          zip -r -j "$FUSION_ID-$NERD_SUFFIX-$NARROW_SUFFIX-$LIGA_SUFFIX-HT.zip" "fused-fonts-HT/"
+          zip -r -j "$FUSION_ID-$NERD_SUFFIX-$NARROW_SUFFIX-$LIGA_SUFFIX-XX.zip" "fused-fonts-XX/"
 
-      - name: Upload zip
+      - name: Upload Zip Output
         uses: actions/upload-artifact@v4
         with:
           name: font-output
