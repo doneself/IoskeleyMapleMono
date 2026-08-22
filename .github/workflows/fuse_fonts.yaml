@@ -25,59 +25,9 @@ env:
   FUSION_LICENSE: "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org"
 
 jobs:
-  update-run-time:
-    name: Update Run Time
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Fetch Git Folder & Readme
-        uses: actions/checkout@v6
-        with:
-          sparse-checkout: |
-            .git
-            README.md
-      - name: Get Current Time
-        run: |
-          UTC_TIME="$(date -u "+%Y-%m-%d %H:%M:%S")"
-          BJT_TIME="$(TZ="Asia/Shanghai" date "+%Y-%m-%d %H:%M:%S")"
-          echo "UTC_TIME=$UTC_TIME" >> "$GITHUB_ENV"
-          echo "BJT_TIME=$BJT_TIME" >> "$GITHUB_ENV"
-          echo "UTC Time: $UTC_TIME"
-          echo "BJT Time: $BJT_TIME"
-      - name: Update Readme
-        run: |
-          sed -i "s|\(<!--UTC_TIME-->\).*\(<!--UTC_TIME-->\)|\1$UTC_TIME\2|g" "README.md"
-          sed -i "s|\(<!--BJT_TIME-->\).*\(<!--BJT_TIME-->\)|\1$BJT_TIME\2|g" "README.md"
-      - name: Commit Changes
-        run: |
-          git config user.name "github‑actions[bot]"
-          git config user.email "github‑actions[bot]@users.noreply.github.com"
-          git add "README.md"
-          git commit -m "Update Run Time: $BJT_TIME"
-          git pull --rebase origin main
-          git push
-
   fuse-fonts:
     name: Fuse Fonts
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        nerd_opt:
-          - { suffix: "NF", arg: "--nerd-font" }
-          - { suffix: "XX", arg: "--no-nerd-font" }
-        narrow_opt:
-          - { suffix: "NR", arg: "--cn-narrow" }
-          - { suffix: "XX", arg: "" }
-        liga_opt:
-          - { suffix: "NL" }
-          - { suffix: "XX" }
-    env:
-      NERD_SUFFIX: ${{ matrix.nerd_opt.suffix }}
-      NERD_ARGS: ${{ matrix.nerd_opt.arg }}
-      NARROW_SUFFIX: ${{ matrix.narrow_opt.suffix }}
-      NARROW_ARGS: ${{ matrix.narrow_opt.arg }}
-      LIGA_SUFFIX: ${{ matrix.liga_opt.suffix }}
     steps:
       - name: Fetch Python Script & OFL License
         uses: actions/checkout@v6
@@ -103,7 +53,7 @@ jobs:
           python-version: 3.13
           check-latest: true
 
-      - name: Build Ioskeley
+      - name: Build Ioskeley Base
         run: |
           git clone --branch "$IOSKELEY_LATEST_VERSION" --single-branch "$IOSKELEY_GIT_URL"
           cd "IoskeleyMono"
@@ -113,96 +63,110 @@ jobs:
           mkdir -p "source‑fonts/jetbrains"
           cp -r "IoskeleyMono/fonts/ttf/"* "source‑fonts/jetbrains/"
 
-      - name: Build Maple
-        run: |
-          git clone --branch "$MAPLE_LATEST_VERSION" --single-branch "$MAPLE_GIT_URL"
-          cd "maple‑font"
-          pip install -r "requirements.txt"
-          python "build.py" --normal --liga --cn --hinted --ttf‑only $NERD_ARGS $NARROW_ARGS
-          cd ..
-          mkdir -p "source‑fonts/maple"
-          if [[ "$NERD_SUFFIX" == "NF" ]]; then
-            cp -r "maple‑font/fonts/NF‑CN/"* "source‑fonts/maple/"
-          else
-            cp -r "maple‑font/fonts/CN/"* "source‑fonts/maple/"
-          fi
-
       - name: Install FontForge & FtCli
         run: |
           sudo apt‑get -y install fontforge
           pip install foundrytools‑cli
 
-      - name: Fuse Fonts
+      - name: Build & Fuse All Variants
         run: |
-          mkdir -p "fused‑fonts‑HT"
-          mkdir -p "fused‑fonts‑XX"
-          for STYLE in "Thin" "ThinItalic" "ExtraLight" "ExtraLightItalic" "Light" "LightItalic" "Regular" "Italic" "Medium" "MediumItalic" "SemiBold" "SemiBoldItalic" "Bold" "BoldItalic" "ExtraBold" "ExtraBoldItalic"; do
+          variants=(
+            "NF|--nerd-font|XX"
+            "NF|--nerd-font|NL"
+            "XX|--no-nerd-font|XX"
+            "XX|--no-nerd-font|NL"
+            "NF|--nerd-font|XX|NR|--cn-narrow"
+            "NF|--nerd-font|NL|NR|--cn-narrow"
+            "XX|--no-nerd-font|XX|NR|--cn-narrow"
+            "XX|--no-nerd-font|NL|NR|--cn-narrow"
+          )
+          
+          for opt in "${variants[@]}"; do
+            IFS='|' read -r NERD_SUFFIX NERD_ARGS LIGA_SUFFIX NARROW_SUFFIX NARROW_ARGS <<< "$opt"
+            
+            echo "==== Build: NERD=$NERD_SUFFIX NARROW=$NARROW_SUFFIX LIGA=$LIGA_SUFFIX ===="
+            
+            git clone --branch "$MAPLE_LATEST_VERSION" --single-branch "$MAPLE_GIT_URL" maple‑tmp
+            cd maple‑tmp
+            pip install -r "requirements.txt"
+            python "build.py" --normal --liga --cn --hinted --ttf‑only $NERD_ARGS $NARROW_ARGS
+            cd ..
+            mkdir -p "source‑fonts/maple"
             if [[ "$NERD_SUFFIX" == "NF" ]]; then
-              fontforge "fuse_fonts.ff" \
-                "source‑fonts/maple/MapleMonoNormal‑NF‑CN‑$STYLE.ttf" \
-                "source‑fonts/jetbrains/IoskeleyMono‑$STYLE.ttf" \
-                "$FUSION_ID‑$STYLE" \
-                "$FUSION_NAME" \
-                "$FUSION_NAME $STYLE" \
-                "$STYLE" \
-                "fused‑font‑HT.ttf"
+              cp -r "maple‑tmp/fonts/NF‑CN/"* "source‑fonts/maple/"
             else
-              fontforge "fuse_fonts.ff" \
-                "source‑fonts/maple/MapleMonoNormal‑CN‑$STYLE.ttf" \
-                "source‑fonts/jetbrains/IoskeleyMono‑$STYLE.ttf" \
-                "$FUSION_ID‑$STYLE" \
-                "$FUSION_NAME" \
-                "$FUSION_NAME $STYLE" \
-                "$STYLE" \
-                "fused‑font‑HT.ttf"
+              cp -r "maple‑tmp/fonts/CN/"* "source‑fonts/maple/"
             fi
 
-            if [[ "$LIGA_SUFFIX" == "NL" ]]; then
-              fontforge -script "strip_ligas.py" "fused‑font‑HT.ttf"
-            fi
+            mkdir -p "fused‑fonts‑HT"
+            mkdir -p "fused‑fonts‑XX"
 
-            ttx "fused‑font‑HT.ttf"
-            sed -i "s|<xAvgCharWidth value=\".*\"/>|<xAvgCharWidth value=\"600\"/>|" "fused‑font‑HT.ttx"
-            sed -i "s|<ulCodePageRange1 value=\".*\"/>|<ulCodePageRange1 value=\"00100000 00010110 00000001 10011111\"/>|" "fused‑font‑HT.ttx"
-            ttx -o "fused‑font‑HT.ttf" "fused‑font‑HT.ttx"
-            rm "fused‑font‑HT.ttx"
+            for STYLE in "Thin" "ThinItalic" "ExtraLight" "ExtraLightItalic" "Light" "LightItalic" "Regular" "Italic" "Medium" "MediumItalic" "SemiBold" "SemiBoldItalic" "Bold" "BoldItalic" "ExtraBold" "ExtraBoldItalic"; do
+              if [[ "$NERD_SUFFIX" == "NF" ]]; then
+                fontforge "fuse_fonts.ff" \
+                  "source‑fonts/maple/MapleMonoNormal‑NF‑CN‑$STYLE.ttf" \
+                  "source‑fonts/jetbrains/IoskeleyMono‑$STYLE.ttf" \
+                  "$FUSION_ID‑$STYLE" \
+                  "$FUSION_NAME" \
+                  "$FUSION_NAME $STYLE" \
+                  "$STYLE" \
+                  "fused‑font‑HT.ttf"
+              else
+                fontforge "fuse_fonts.ff" \
+                  "source‑fonts/maple/MapleMonoNormal‑CN‑$STYLE.ttf" \
+                  "source‑fonts/jetbrains/IoskeleyMono‑$STYLE.ttf" \
+                  "$FUSION_ID‑$STYLE" \
+                  "$FUSION_NAME" \
+                  "$FUSION_NAME $STYLE" \
+                  "$STYLE" \
+                  "fused‑font‑HT.ttf"
+              fi
 
-            gftools rename‑font "fused‑font‑HT.ttf" "$FUSION_NAME"
-            gftools update‑nameids "fused‑font‑HT.ttf" \
-              --uniqueid "$FUSION_ID‑$STYLE‑$FUSION_VERSION" \
-              --description "$FUSION_DESCRIPTION" \
-              --designer "$FUSION_DEVELOPER" \
-              --manufacturer "$FUSION_DEVELOPER" \
-              --trademark "$FUSION_NAME" \
-              --version "$FUSION_VERSION" \
-              --copyright "$(echo -e "$IOSKELEY_COPYRIGHT\n$MAPLE_COPYRIGHT\n$FUSION_COPYRIGHT")" \
-              --license "$FUSION_LICENSE" \
-              --urlvendor "$FUSION_URL" \
-              --urldesigner "https://github.com/ahatem/IoskeleyMono" \
-              --urllicense "https://openfontlicense.org"
+              if [[ "$LIGA_SUFFIX" == "NL" ]]; then
+                fontforge -script "strip_ligas.py" "fused‑font‑HT.ttf"
+              fi
 
-            gftools drop‑hints "fused‑font‑HT.ttf" "fused‑font‑XX.ttf"
+              ttx "fused‑font‑HT.ttf"
+              sed -i "s|<xAvgCharWidth value=\".*\"/>|<xAvgCharWidth value=\"600\"/>|" "fused‑font‑HT.ttx"
+              sed -i "s|<ulCodePageRange1 value=\".*\"/>|<ulCodePageRange1 value=\"00100000 00010110 00000001 10011111\"/>|" "fused‑font‑HT.ttx"
+              ttx -o "fused‑font‑HT.ttf" "fused‑font‑HT.ttx"
+              rm "fused‑font‑HT.ttx"
 
-            if [[ "$NARROW_SUFFIX" != "NR" ]]; then
-              ftcli fix monospace "fused‑font‑HT.ttf"
-              ftcli fix monospace "fused‑font‑XX.ttf"
-            fi
+              gftools rename‑font "fused‑font‑HT.ttf" "$FUSION_NAME"
+              gftools update‑nameids "fused‑font‑HT.ttf" \
+                --uniqueid "$FUSION_ID‑$STYLE‑$FUSION_VERSION" \
+                --description "$FUSION_DESCRIPTION" \
+                --designer "$FUSION_DEVELOPER" \
+                --manufacturer "$FUSION_DEVELOPER" \
+                --trademark "$FUSION_NAME" \
+                --version "$FUSION_VERSION" \
+                --copyright "$(echo -e "$IOSKELEY_COPYRIGHT\n$MAPLE_COPYRIGHT\n$FUSION_COPYRIGHT")" \
+                --license "$FUSION_LICENSE" \
+                --urlvendor "$FUSION_URL" \
+                --urldesigner "https://github.com/ahatem/IoskeleyMono" \
+                --urllicense "https://openfontlicense.org"
 
-            mv "fused‑font‑HT.ttf" "fused‑fonts‑HT/$FUSION_ID‑$STYLE.ttf"
-            mv "fused‑font‑XX.ttf" "fused‑fonts‑XX/$FUSION_ID‑$STYLE.ttf"
+              gftools drop‑hints "fused‑font‑HT.ttf" "fused‑font‑XX.ttf"
+
+              if [[ -z "$NARROW_ARGS" ]]; then
+                ftcli fix monospace "fused‑font‑HT.ttf"
+                ftcli fix monospace "fused‑font‑XX.ttf"
+              fi
+
+              mv "fused‑font‑HT.ttf" "fused‑fonts‑HT/$FUSION_ID‑$STYLE.ttf"
+              mv "fused‑font‑XX.ttf" "fused‑fonts‑XX/$FUSION_ID‑$STYLE.ttf"
+            done
+
+            zip -r "${FUSION_ID}-${NERD_SUFFIX}-${NARROW_SUFFIX:-XX}-${LIGA_SUFFIX}-HT.zip" "fused‑fonts‑HT"
+            zip -r "${FUSION_ID}-${NERD_SUFFIX}-${NARROW_SUFFIX:-XX}-${LIGA_SUFFIX}-XX.zip" "fused‑fonts‑XX"
+            
+            rm -rf maple‑tmp source‑fonts/maple fused‑fonts‑HT fused‑fonts‑XX
           done
 
-      - name: Zip Fonts
-        run: |
-          zip -r "${FUSION_ID}-${NERD_SUFFIX}-${NARROW_SUFFIX}-${LIGA_SUFFIX}-HT.zip" "fused‑fonts‑HT"
-          zip -r "${FUSION_ID}-${NERD_SUFFIX}-${NARROW_SUFFIX}-${LIGA_SUFFIX}-XX.zip" "fused‑fonts‑XX"
-
-      - name: Release Release Fonts
+      - name: Release Fonts
         uses: softprops/action‑gh‑release@v2
         with:
-          files: |
-            ${{ env.FUSION_ID }}‑${{ env.NERD_SUFFIX }}‑${{ env.NARROW_SUFFIX }}‑${{ env.LIGA_SUFFIX }}‑HT.zip
-            ${{ env.FUSION_ID }}‑${{ env.NERD_SUFFIX }}‑${{ env.NARROW_SUFFIX }}‑${{ env.LIGA_SUFFIX }}‑XX.zip
+          files: "*.zip"
           tag_name: ${{ env.FUSION_VERSION }}
           name: ${{ env.FUSION_VERSION }}
           body: >
