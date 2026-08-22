@@ -1,5 +1,5 @@
 #!/usr/bin/env fontforge -script
-# Forked from SpaceTimee/Fusion‑JetBrainsMapleMono
+
 if ( $argc != 3 )
     Print("Usage: fontforge -script fuse_fonts.ff <base.ttf> <cjk.ttf> <out.ttf>")
     Exit(1)
@@ -10,7 +10,6 @@ base = $font
 Open($2)
 MergeFonts(base)
 
-# 删除maple里面的西文字形，保留CJK（原版逻辑原样保留）
 Select(0,0x0000,0x2FFF,0)
 Clear()
 Select(0,0xA000,0xFAFF,0)
@@ -23,7 +22,6 @@ RemoveOverlap()
 Round()
 Simplify()
 
-# ==========仅此一处修改字体名字 ==========
 base.familyname = "IoskeleyMapleMono"
 base.fontname = "IoskeleyMapleMono-" + base.weight
 base.fullname = "Ioskeley Maple Mono " + base.weight
