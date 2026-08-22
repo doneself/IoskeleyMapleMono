@@ -24,7 +24,9 @@ jobs:
           echo "Ioskeley download URL: $URL"
           wget "$URL" -O ioskeley.zip
           unzip -q ioskeley.zip
-          ls -la *.ttf
+          echo "=== find all ttf ==="
+          find . -name "*.ttf"
+          cd ..
 
       - name: Clone maple‑font v7.9 source code
         run: |
@@ -47,10 +49,11 @@ jobs:
 
       - name: Batch‑fuse all weights
         run: |
-          for ttf in ./ioskeley/*.ttf; do
+          # 真实路径 Normal/ ，文件名前缀 IoskeleyMonoNerdFontMono‑
+          for ttf in ./ioskeley/Normal/*.ttf; do
             [ -f "$ttf" ] || continue
             fn=$(basename "$ttf")
-            suffix="${fn#IoskeleyMonoNerdFont-}"
+            suffix="${fn#IoskeleyMonoNerdFontMono-}"
             fontforge -script fuse_fonts.ff "$ttf" ./maple_cn/ttf/MapleMono-CN-${suffix} ./out/base/IoskeleyMapleMono-${suffix}
             fontforge -script fuse_fonts.ff "$ttf" ./maple_cn_narrow/ttf/MapleMono-CN-${suffix} ./out/nr/IoskeleyMapleMono-NR-${suffix}
           done
