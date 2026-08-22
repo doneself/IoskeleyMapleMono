@@ -1,31 +1,16 @@
-#!/usr/bin/env fontforge -script
-
-if ( $argc != 3 )
-    Print("Usage: fontforge -script fuse_fonts.ff <base.ttf> <cjk.ttf> <out.ttf>")
-    exit(1)
-endif
-
-Open($1)
-base = $font
-Open($2)
-MergeFonts(base)
-
-Select(0,0x0000,0x2FFF,0)
-Clear()
-Select(0,0xA000,0xFAFF,0)
-Clear()
-
-em = base.em
-SetWidth(em*2,0x3000,0x9FFF,0)
-
-RemoveOverlap()
-Round()
-Simplify()
-
-base.familyname = "IoskeleyMapleMono"
-base.fontname = "IoskeleyMapleMono-" + base.weight
-base.fullname = "Ioskeley Maple Mono " + base.weight
-base.copyright += "\nCJK glyphs from Maple‑Mono OFL‑1.1"
-
-Generate($3)
-Close()
+#!/usr/bin/fontforge
+Open($2);
+MergeFonts($1);
+SetFontNames($3, $4, $5, $6);
+SetFontOrder(2);
+SelectAll();
+AutoInstr();
+AutoHint();
+AddExtrema();
+CanonicalContours();
+CanonicalStart();
+Simplify(-1, 1);
+RoundToInt();
+RemoveOverlap();
+Generate($7);
+Close();

@@ -1,19 +1,9 @@
-import fontforge
-import glob
-import os
+#!/usr/bin/fontforge
 import sys
-
-def strip_ligatures(in_font, out_font):
-    font = fontforge.open(in_font)
-    for lookup in font.gsub_lookups:
+import fontforge
+font = fontforge.open(path := sys.argv[1])
+for lookup in font.gsub_lookups:
+    if (info := font.getLookupInfo(lookup)) and any(feature[0] == "calt" for feature in info[2]):
         font.removeLookup(lookup)
-    font.generate(out_font)
-    font.close()
-
-if __name__ == "__main__":
-    src_dir = sys.argv[1]
-    dst_dir = sys.argv[2]
-    os.makedirs(dst_dir, exist_ok=True)
-    for f in glob.glob(os.path.join(src_dir, "*.ttf")):
-        basename = os.path.basename(f)
-        strip_ligatures(f, os.path.join(dst_dir, basename))
+font.generate(path)
+font.close()
