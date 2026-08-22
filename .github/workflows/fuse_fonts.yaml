@@ -10,59 +10,58 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y fontforge python3 jq unzip curl
+          sudo apt-get install -y fontforge python3 python3-pip jq unzip curl git
 
-      - name: Download IoskeleyMono-NerdFont
+      - name: Download IoskeleyMono‑NerdFont
         run: |
           mkdir -p ioskeley
           cd ioskeley
           curl -s https://api.github.com/repos/ahatem/IoskeleyMono/releases/latest > meta.json
           URL=$(jq -r '.assets | map(select(.name == "IoskeleyMono-NerdFont.zip"))[0].browser_download_url' meta.json)
-          echo "Ioskeley URL: $URL"
+          echo "Ioskeley download URL: $URL"
           wget "$URL" -O ioskeley.zip
           unzip -q ioskeley.zip
+          ls -la *.ttf
 
-      - name: Download MapleMono-CN (v7.9 fixed tag)
+      - name: Clone maple‑font v7.9 source code
         run: |
-          mkdir -p maple
-          cd maple
-          curl -s https://api.github.com/repos/subframe7536/maple-font/releases/tags/v7.9 > meta.json
-          URL=$(jq -r '.assets[] | select(.name=="MapleMono-CN.zip") | .browser_download_url' meta.json)
-          wget "$URL" -O maple.zip
-          unzip -q maple.zip
+          git clone --depth 1 --branch v7.9 https://github.com/subframe7536/maple-font.git maple-font-src
+          cd maple-font-src
+          pip3 install -r requirements.txt
 
-      - name: Download MapleMono-CN-Narrow
+      - name: Build MapleMono CN (normal width)
         run: |
-          cd maple
-          curl -s https://api.github.com/repos/subframe7536/maple-font/releases/tags/v7.9 > meta.json
-          URL=$(jq -r '.assets[] | select(.name=="MapleMono-CN-Narrow.zip") | .browser_download_url' meta.json)
-          wget "$URL" -O narrow.zip
-          unzip -q narrow.zip
-          cd ..
+          cd maple-font-src
+          python3 build.py --cn --nf-mono --ttf-only --output ../maple_cn
 
-      - name: Prepare output dir
+      - name: Build MapleMono CN‑Narrow
+        run: |
+          cd maple-font-src
+          python3 build.py --cn --cn-narrow --nf-mono --ttf-only --output ../maple_cn_narrow
+
+      - name: Prepare output folders
         run: mkdir -p out/base out/nl out/nr
 
-      - name: Batch build all weights
+      - name: Batch‑fuse all weights
         run: |
           for ttf in ./ioskeley/*.ttf; do
             [ -f "$ttf" ] || continue
             fn=$(basename "$ttf")
-            suffix=${fn#IoskeleyMonoNerdFont-}
-            fontforge -script fuse_fonts.ff "$ttf" ./maple/ttf/MapleMono-CN-${suffix} ./out/base/IoskeleyMapleMono-${suffix}
-            fontforge -script fuse_fonts.ff "$ttf" ./maple/ttf/MapleMono-CN-Narrow-${suffix} ./out/nr/IoskeleyMapleMono-NR-${suffix}
+            suffix="${fn#IoskeleyMonoNerdFont-}"
+            fontforge -script fuse_fonts.ff "$ttf" ./maple_cn/ttf/MapleMono-CN-${suffix} ./out/base/IoskeleyMapleMono-${suffix}
+            fontforge -script fuse_fonts.ff "$ttf" ./maple_cn_narrow/ttf/MapleMono-CN-${suffix} ./out/nr/IoskeleyMapleMono-NR-${suffix}
           done
 
-      - name: Generate No-Ligatures NL
+      - name: Generate No‑Ligatures NL
         run: python3 strip_ligas.py ./out/base ./out/nl
 
-      - name: Package
+      - name: Zip artifacts
         run: zip -r IoskeleyMapleMono.zip out
 
-      - name: Upload artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v6
         with:
           name: font-artifact
