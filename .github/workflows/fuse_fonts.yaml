@@ -1,0 +1,70 @@
+name: Build IoskeleyMapleMono
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt update
+          sudo apt install -y fontforge python3 jq unzip curl
+
+      - name: Download IoskeleyMono‑NerdFont
+        run: |
+          mkdir -p ioskeley
+          cd ioskeley
+          curl -s https://api.github.com/repos/ahatem/IoskeleyMono/releases/latest > meta.json
+          URL=$(jq -r '.assets[] | select(.name | contains("NerdFont") and endswith(".zip")) | .browser_download_url' meta.json)
+          wget "$URL" -O ioskeley.zip
+          unzip -q ioskeley.zip
+
+      - name: Download Maple‑Mono‑CN
+        run: |
+          mkdir -p maple
+          cd maple
+          curl -s https://api.github.com/repos/subframe7536/maple-font/releases/latest > meta.json
+          URL=$(jq -r '.assets[] | select(.name=="MapleMono-CN.zip") | .browser_download_url' meta.json)
+          wget "$URL" -O maple.zip
+          unzip -q maple.zip
+
+      - name: Download Maple‑Mono‑CN‑Narrow
+        run: |
+          cd maple
+          curl -s https://api.github.com/repos/subframe7536/maple-font/releases/latest > meta.json
+          URL=$(jq -r '.assets[] | select(.name=="MapleMono-CN-Narrow.zip") | .browser_download_url' meta.json)
+          wget "$URL" -O narrow.zip
+          unzip -q narrow.zip
+          cd ..
+
+      - name: Prepare output folders
+        run: mkdir -p out/base out/nl out/nr
+
+      - name: Batch‑build fonts
+        run: |
+          for ttf in ./ioskeley/**/*.ttf; do
+            [ -f "$ttf" ] || continue
+            filename=$(basename "$ttf")
+            # 截取字重后缀
+            suffix="${filename#IoskeleyMonoNerdFont-}"
+            out_name="IoskeleyMapleMono-${suffix}"
+            fontforge -script fuse_fonts.ff "$ttf" ./maple/ttf/MapleMono-CN-${suffix} ./out/base/${out_name}
+            fontforge -script fuse_fonts.ff "$ttf" ./maple/ttf/MapleMono-CN-Narrow-${suffix} ./out/nr/${out_name}
+          done
+
+      - name: Generate No‑Ligatures (NL)
+        run: python3 strip_ligas.py ./out/base ./out/nl
+
+      - name: Package zip
+        run: zip -r IoskeleyMapleMono.zip out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: font‑artifact
+          path: IoskeleyMapleMono.zip
