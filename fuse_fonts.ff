@@ -1,46 +1,33 @@
 #!/usr/bin/env fontforge -script
-# IoskeleyMono(Latin) + Maple‑Mono‑CN(CJK)
-# Same effect as Fusion‑JetBrainsMapleMono
-
+# Forked from SpaceTimee/Fusion‑JetBrainsMapleMono
 if ( $argc != 3 )
     Print("Usage: fontforge -script fuse_fonts.ff <base.ttf> <cjk.ttf> <out.ttf>")
     Exit(1)
 endif
 
-basePath = $1
-cjkPath  = $2
-outPath  = $3
+Open($1)
+base = $font
+Open($2)
+MergeFonts(base)
 
-# 打开西文基础字体(IoskeleyMono)
-Open(basePath)
-baseFont = $font
-
-# 打开CJK字体，合并入主字体
-Open(cjkPath)
-MergeFonts(baseFont)
-
-# 删除从Maple带进来的西文字形，只保留CJK区块
-Select(0, 0x0000, 0x2FFF, 0)
+# 删除maple里面的西文字形，保留CJK（原版逻辑原样保留）
+Select(0,0x0000,0x2FFF,0)
 Clear()
-Select(0, 0xA000, 0xFAFF, 0)
+Select(0,0xA000,0xFAFF,0)
 Clear()
 
-# 设置CJK宽度 = 2倍英文字宽，保证代码对齐
-emSize = baseFont.em
-cjkAdvance = emSize * 2
-Select(0, 0x3000, 0x9FFF, 0)
-SetWidth(cjkAdvance)
+em = base.em
+SetWidth(em*2,0x3000,0x9FFF,0)
 
-# 轮廓后处理（原版标准步骤，防止字体出错）
 RemoveOverlap()
 Round()
 Simplify()
 
-# 修改字体名称
-baseFont.familyname = "IoskeleyMapleMono"
-baseFont.fontname   = "IoskeleyMapleMono-" + baseFont.weight
-baseFont.fullname   = "Ioskeley Maple Mono " + baseFont.weight
-baseFont.copyright += "\nCJK glyphs from Maple‑Mono, OFL‑1.1"
+# ==========仅此一处修改字体名字 ==========
+base.familyname = "IoskeleyMapleMono"
+base.fontname = "IoskeleyMapleMono-" + base.weight
+base.fullname = "Ioskeley Maple Mono " + base.weight
+base.copyright += "\nCJK glyphs from Maple‑Mono OFL‑1.1"
 
-Generate(outPath)
+Generate($3)
 Close()
