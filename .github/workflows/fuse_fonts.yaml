@@ -15,7 +15,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fontforge python3 jq unzip curl
 
-      - name: Download IoskeleyMono‑NerdFont
+      - name: Download IoskeleyMono-NerdFont
         run: |
           mkdir -p ioskeley
           cd ioskeley
@@ -26,7 +26,7 @@ jobs:
           find . -name "*.ttf"
           cd ..
 
-      - name: Download MapleMono‑CN (tag v7.3, same as original repo era)
+      - name: Download MapleMono-CN tag v7.3
         run: |
           mkdir -p maple
           cd maple
@@ -36,17 +36,8 @@ jobs:
           unzip -q maple.zip
           cd ..
 
-      - name: Download MapleMono‑CN‑Narrow (v7.3 has this zip asset)
-        run: |
-          cd maple
-          curl -s https://api.github.com/repos/subframe7536/maple-font/releases/tags/v7.3 > meta.json
-          URL=$(jq -r '.assets[] | select(.name=="MapleMono-CN-Narrow.zip") | .browser_download_url' meta.json)
-          wget "$URL" -O narrow.zip
-          unzip -q narrow.zip
-          cd ..
-
       - name: Prepare output dir
-        run: mkdir -p out/base out/nl out/nr
+        run: mkdir -p out/base out/nl
 
       - name: Batch build all weights
         run: |
@@ -55,7 +46,6 @@ jobs:
             fn=$(basename "$ttf")
             suffix="${fn#IoskeleyMonoNerdFontMono-}"
             fontforge -script fuse_fonts.ff "$ttf" ./maple/ttf/MapleMono-CN-${suffix} ./out/base/IoskeleyMapleMono-${suffix}
-            fontforge -script fuse_fonts.ff "$ttf" ./maple/ttf/MapleMono-CN-Narrow-${suffix} ./out/nr/IoskeleyMapleMono-NR-${suffix}
           done
 
       - name: Generate No‑Ligatures NL
