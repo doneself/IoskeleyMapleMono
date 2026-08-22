@@ -2,7 +2,7 @@
 
 if ( $argc != 3 )
     Print("Usage: fontforge -script fuse_fonts.ff <base.ttf> <cjk.ttf> <out.ttf>")
-    Exit(1)
+    exit(1)
 endif
 
 Open($1)
